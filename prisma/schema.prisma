@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model Admin {
+  id String @id @default(uuid())
+  username String @unique
+  passwordHash String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  links PasswordLink[]
+}
+model Session {
+  tokenHash String @id
+  adminId String
+  admin Admin @relation(fields:[adminId], references:[id], onDelete:Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}
+model PasswordLink {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  username String
+  createdBy String
+  creator Admin @relation(fields:[createdBy], references:[id])
+  note String @default("")
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt DateTime?
+  revokedAt DateTime?
+  claimedAt DateTime?
+  @@index([createdAt])
+}
+model RateLimit {
+  key String @id
+  count Int
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+model Audit {
+  id String @id @default(uuid())
+  action String
+  status String
+  linkId String?
+  adminId String?
+  failureReason String?
+  ipAddress String
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
