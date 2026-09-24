@@ -27,10 +27,11 @@ export function PasswordField({
 }) {
   const [visible, setVisible] = useState(false);
   return (
-    <label>
-      {label}
+    <div className="password-field">
+      <label htmlFor={name}>{label}</label>
       <span className="password-input">
         <input
+          id={name}
           name={name}
           type={visible ? 'text' : 'password'}
           required
@@ -47,7 +48,7 @@ export function PasswordField({
           {visible ? 'Hide' : 'Show'}
         </button>
       </span>
-    </label>
+    </div>
   );
 }
 export function Notice({ text }: { text: string }) {

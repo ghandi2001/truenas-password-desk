@@ -1,0 +1,15 @@
+.git
+.claude
+.env
+.env.*
+node_modules
+.next
+coverage
+test-results
+playwright-report
+*.pem
+*.key
+*.dump
+*.sql.gz
+*.tsbuildinfo
+.venv

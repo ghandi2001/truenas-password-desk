@@ -153,6 +153,12 @@ button:disabled {
 .quiet {
   padding: 8px;
 }
+.password-field {
+  margin-bottom: 20px;
+}
+.password-field label {
+  margin-bottom: 0;
+}
 .password-input {
   display: flex;
   align-items: center;

@@ -1,0 +1,15 @@
+{
+	# Do not enable debug logging: URLs contain bearer tokens.
+	log default {
+		level ERROR
+	}
+}
+{$APP_HOST} {
+	# Access logging is deliberately not enabled.
+	request_body {
+		max_size 8KB
+	}
+	reverse_proxy app:3000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}

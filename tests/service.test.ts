@@ -8,6 +8,8 @@ import { loadConfig } from '../src/server/config';
 import { createToken, digest, hashPassword } from '../src/server/security';
 import { Service } from '../src/server/service';
 import { NasFailure } from '../src/server/truenas';
+import { handler } from '../src/server/http';
+import { privateDigest } from '../src/server/security';
 
 test('database-backed admin, link lifecycle, binding, limiting and concurrency', async () => {
   const pg = new PGlite();
@@ -55,6 +57,39 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
     const login = await service.login('operator', password, 'ip');
     assert.equal((await service.session(login.token))?.adminId, admin.id);
     assert.equal(await service.session(createToken()), null);
+    const handle = handler(service);
+    const authHeaders = {
+      origin: c.appUrl,
+      'content-type': 'application/json',
+      cookie: `__Host-session=${login.token}`,
+    };
+    const denied = await handle(
+      new Request(c.appUrl + '/api/admin/logout', {
+        method: 'POST',
+        headers: authHeaders,
+        body: '{}',
+      }),
+      ['admin', 'logout'],
+    );
+    assert.equal(denied.status, 403);
+    const permitted = await handle(
+      new Request(c.appUrl + '/api/admin/logout', {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'x-csrf-token': privateDigest('csrf:' + login.token, c.sessionSecret),
+        },
+        body: '{}',
+      }),
+      ['admin', 'logout'],
+    );
+    assert.equal(permitted.status, 200);
+    const expiring = await service.login('operator', password, 'ip');
+    await db.session.update({
+      where: { tokenHash: digest(expiring.token) },
+      data: { expiresAt: new Date(0) },
+    });
+    assert.equal(await service.session(expiring.token), null);
     await service.logout(login.token, 'ip');
     assert.equal(await service.session(login.token), null);
     const issued = await service.createLink(
@@ -152,6 +187,39 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
     ]);
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
     assert.equal(calls, before + 1);
+    await db.rateLimit.deleteMany();
+    const first = await make(),
+      second = await make();
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const barrier = new Promise<void>((r) => {
+      release = r;
+    });
+    let concurrentCalls = 0;
+    const blocking = new Service(db, c, async () => {
+      concurrentCalls++;
+      entered();
+      await barrier;
+    });
+    const inFlight = blocking.change(first.token, data, 'parallel-ip');
+    await started;
+    await assert.rejects(blocking.change(second.token, data, 'parallel-ip'));
+    await assert.rejects(blocking.revoke(admin.id, first.id, 'ip'));
+    release();
+    await inFlight;
+    assert.equal(concurrentCalls, 1);
+    await db.rateLimit.deleteMany();
+    const limited = await make();
+    fail = true;
+    uncertain = false;
+    for (let i = 0; i < c.maxAttempts; i++)
+      await assert.rejects(service.change(limited.token, data, 'limited-ip'));
+    const atLimit = calls;
+    await assert.rejects(service.change(limited.token, data, 'limited-ip'));
+    assert.equal(calls, atLimit);
     for (let i = 0; i < c.maxAttempts; i++)
       assert.equal(await service.limit('test-bucket', c.maxAttempts), true);
     assert.equal(await service.limit('test-bucket', c.maxAttempts), false);
