@@ -126,13 +126,29 @@ This is not a comprehensive breached-password service or an entropy guarantee. U
 ## HTTPS deployment
 
 ```sh
-docker compose build
-docker compose up -d
-# Once migrations have completed, create the initial admin interactively:
-docker compose run --rm --entrypoint sh migrate -c 'npx tsx scripts/create-admin.ts'
+./scripts/deploy.sh
+# Equivalent: npm run deploy
 ```
 
-Configure `DATABASE_URL` in `.env` to use Compose host `db`. Only Caddy exposes ports 80/443; neither app nor database publishes a host port. Point DNS to the host and permit ACME validation for automatic HTTPS. Use a private CA/internal Caddy configuration for private-only hostnames and distribute trust correctly. Mount your NAS CA in the app container if necessary.
+The script builds the app and tools images, validates runtime configuration, waits for PostgreSQL, applies migrations, runs the first-admin seeder, and starts the app and HTTPS proxy with health checks. Run from an interactive terminal: the first run asks for an admin username and hidden password/confirmation. Passwords must satisfy the policy; no default password or password environment variable is used. Repeat deployments skip seeding when any admin already exists and never reset that admin's password. Concurrent seed processes serialize creation with a database lock.
+
+To prepare only the database before NAS credentials and public HTTPS are ready:
+
+```sh
+./scripts/deploy.sh --database-only
+```
+
+This builds the migration image, starts PostgreSQL and applies pending migrations, but does **not** seed or start the application. It requires only `.env` and `POSTGRES_PASSWORD`. To seed separately afterward:
+
+```sh
+APP_HOST=localhost docker compose run --rm --no-deps migrate npm run db:seed
+# Without Docker, with DATABASE_URL configured locally:
+npm run db:seed
+```
+
+For the bundled database, use a randomly generated hexadecimal `POSTGRES_PASSWORD` (at least 32 bytes). Compose derives the app/tools `DATABASE_URL` from it so they cannot accidentally migrate a different database configured for local development. Reserved URL characters in this password are not supported by the bundled Compose interpolation; use hex. Existing database volumes retain their original password—do not regenerate it on repeat deployments. Direct non-Docker commands still use `DATABASE_URL` in `.env`.
+
+Only Caddy exposes ports 80/443; neither app nor database publishes a host port. Point DNS to the host and permit ACME validation for automatic HTTPS. Use a private CA/internal Caddy configuration for private-only hostnames and distribute trust correctly. Mount your NAS CA in the app container if necessary.
 
 The `migrate` service waits for database readiness and completes migrations before the app starts. The app runs as a non-root user. `/api/health` checks database availability and returns only a generic status; it is not a NAS credential probe. No Redis is required: atomic PostgreSQL upserts enforce limits across application instances.
 

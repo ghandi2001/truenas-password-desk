@@ -18,6 +18,8 @@ services:
       context: .
       target: tools
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://password_service:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/password_service
     depends_on:
       db:
         condition: service_healthy
@@ -28,6 +30,7 @@ services:
       target: runtime
     env_file: .env
     environment:
+      DATABASE_URL: postgresql://password_service:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/password_service
       TRUST_PROXY: 'true'
     depends_on:
       migrate:
