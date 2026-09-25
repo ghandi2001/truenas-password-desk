@@ -2,8 +2,11 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --fetch-retries=5 --fetch-retry-mintimeout=2000 --fetch-retry-maxtimeout=20000 --maxsockets=5
+COPY package.json package-lock.json scripts/import-build-cache.cjs ./
+COPY .build-cache /tmp/build-cache
+RUN node import-build-cache.cjs /tmp/build-cache && rm -rf /tmp/build-cache import-build-cache.cjs \
+ && npm ci --offline --ignore-scripts --no-audit --no-fund \
+ && npm rebuild --foreground-scripts
 COPY . .
 RUN npm run build
 

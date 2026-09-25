@@ -13,3 +13,6 @@ playwright-report
 *.sql.gz
 *.tsbuildinfo
 .venv
+# Verified offline dependency archives (scripts/prepare-build-cache.py) are required in context.
+!.build-cache
+.build-cache/*.partial
