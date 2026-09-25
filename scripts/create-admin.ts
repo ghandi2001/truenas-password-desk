@@ -1,14 +1,19 @@
 import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { db } from '../src/server/db';
-import { loadConfig } from '../src/server/config';
+import { seedInitialAdmin } from '../src/server/seed';
 import {
   hashPassword,
   passwordError,
   usernamePattern,
 } from '../src/server/security';
 async function main() {
-  loadConfig();
+  const initialOnly = process.argv.includes('--initial');
+  if (initialOnly && (await db.admin.count())) {
+    process.stdout.write('Initial admin already exists; nothing changed.\n');
+    await db.$disconnect();
+    return;
+  }
   if (!process.stdin.isTTY)
     throw Error('Run admin:create in an interactive terminal.');
   let hidden = false;
@@ -37,10 +42,16 @@ async function main() {
       12,
     );
     if (error) throw Error(error);
-    await db.admin.create({
-      data: { username, passwordHash: await hashPassword(password) },
-    });
-    process.stdout.write('Admin created. No default password is configured.\n');
+    const created = initialOnly
+      ? await seedInitialAdmin(db, username, password, confirm)
+      : !!(await db.admin.create({
+          data: { username, passwordHash: await hashPassword(password) },
+        }));
+    process.stdout.write(
+      created
+        ? 'Admin created. No default password is configured.\n'
+        : 'Initial admin already exists; nothing changed.\n',
+    );
   } finally {
     rl.close();
     await db.$disconnect();
@@ -49,7 +60,8 @@ async function main() {
 function createRandomPlaceholder() {
   return 'not-the-current-admin-password';
 }
-main().catch(() => {
+main().catch(async () => {
+  await db.$disconnect();
   process.stderr.write(
     'Admin creation failed. Check configuration, unique username, database, and password policy.\n',
   );
