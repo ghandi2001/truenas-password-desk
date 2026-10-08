@@ -13,6 +13,7 @@ coverage/
 *.sql.gz
 *.tsbuildinfo
 .claude/
+.vscode/
 .DS_Store
 .venv/
 __pycache__/

@@ -227,3 +227,7 @@ Regularly purge expired sessions and expired rate-limit rows with database maint
 - **429 for many users:** check whether requests are sharing the fallback IP limiter. Only enable `TRUST_PROXY=true` when direct access to the app is blocked and the proxy overwrites forwarding headers.
 - **Admin setup cannot run:** use an interactive terminal (`docker compose run`, not a piped password); run migrations first and choose a new username.
 - **Database connection error:** verify URL encoding, DB hostname `db` inside Compose, matching database password and readiness. Errors are intentionally not returned verbatim.
+
+## License
+
+[MIT](LICENSE)
