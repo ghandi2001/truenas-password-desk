@@ -12,8 +12,12 @@ import {
   hashPassword,
 } from './security';
 import { NasFailure, TrueNasClient } from './truenas';
-export const genericFailure =
-  'The password could not be changed. Verify your current password and try again.';
+
+// Cache the SMB user listing briefly: the picker refetches on each admin page
+// load, and the NAS should not see a query burst per keystroke.
+const SMB_LIST_TTL_MS = 30_000;
+
+export const genericFailure = 'The password could not be changed. Try again.';
 export class SafeError extends Error {
   constructor(
     message: string,
@@ -162,6 +166,13 @@ export class Service {
       id: link.id,
       url: `${this.config.appUrl}/password-change/${token}`,
     };
+  }
+  async listSmbUsers() {
+    const cached = smbUserCache.get(this);
+    if (cached && Date.now() - cached.at < SMB_LIST_TTL_MS) return cached.names;
+    const names = await new TrueNasClient(this.config).listSmbUsers();
+    smbUserCache.set(this, { at: Date.now(), names });
+    return names;
   }
   async listLinks() {
     const rows = await this.db.passwordLink.findMany({

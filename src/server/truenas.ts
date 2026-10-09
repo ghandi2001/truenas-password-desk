@@ -164,6 +164,27 @@ export class TrueNasClient {
       this.close();
     }
   }
+  /** Real Samba accounts (passdb), not the always-false user.query smb flag. */
+  async listSmbUsers(): Promise<string[]> {
+    try {
+      await this.connect();
+      await this.authenticate();
+      const rows = await this.call('smb.passdb_list', []);
+      if (!Array.isArray(rows)) throw new NasFailure();
+      return rows
+        .map((r) =>
+          r && typeof r === 'object' && typeof r.username === 'string'
+            ? r.username
+            : '',
+        )
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    } catch (e) {
+      throw e instanceof NasFailure ? e : new NasFailure();
+    } finally {
+      this.close();
+    }
+  }
   close() {
     this.fail();
     this.socket?.terminate();
