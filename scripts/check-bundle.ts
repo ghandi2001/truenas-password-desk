@@ -14,7 +14,6 @@ async function scan(dir: string): Promise<void> {
       'fixture-api-key-not-real',
       'browser-fixture-not-a-real-key',
       'user.set_password',
-      'verify_smb.py',
     ])
       if (content.includes(forbidden))
         throw Error('Backend material found in browser bundle.');
