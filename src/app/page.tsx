@@ -1,19 +1,19 @@
+'use client';
 import Link from 'next/link';
+import { useLocale } from '@/i18n/locale-provider';
 export default function Home() {
+  const { d } = useLocale();
   return (
     <section className="card narrow">
-      <p className="eyebrow">PASSWORD SELF-SERVICE</p>
+      <p className="eyebrow">{d.home.eyebrow}</p>
       <h1>
-        A fresh password.
+        {d.home.headingTop}
         <br />
-        The same secure access.
+        {d.home.headingBottom}
       </h1>
-      <p>
-        Open the temporary link sent by your administrator to change your SMB
-        password. You will need your current password.
-      </p>
+      <p>{d.home.intro}</p>
       <Link className="button" href="/admin">
-        Administrator sign in
+        {d.home.adminLink}
       </Link>
     </section>
   );

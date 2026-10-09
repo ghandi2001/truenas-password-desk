@@ -14,7 +14,8 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Fallbacks behind the self-hosted Vazirmatn applied via next/font on <html>. */
+  font-family: Tahoma, Arial, Helvetica, sans-serif;
   line-height: 1.6;
 }
 .brand {
@@ -26,9 +27,27 @@ body {
   padding: 28px 24px;
   font-weight: 700;
 }
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
 .brand small {
   font-size: 10px;
   letter-spacing: 1.6px;
+}
+.lang-switch {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 4px;
+}
+.lang-switch button {
+  padding: 6px 12px;
+  min-height: 0;
+  font-size: 12px;
+}
+.lang-switch button.active {
+  background: var(--accent);
+  color: white;
 }
 .brand-icon {
   background: var(--accent);
@@ -168,6 +187,51 @@ button:disabled {
   flex: 1;
   min-width: 0;
 }
+/* Searchable SMB user combobox */
+.user-select {
+  position: relative;
+  display: block;
+}
+.user-select input {
+  width: 100%;
+}
+.user-select-toggle {
+  position: absolute;
+  inset-inline-end: 6px;
+  bottom: 6px;
+  min-height: 0;
+  padding: 4px 10px;
+  border: 0;
+}
+.user-select-list {
+  position: absolute;
+  z-index: 20;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px #172b351f;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+}
+.user-select-list [role='option'] {
+  padding: 9px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: start;
+}
+.user-select-list [role='option'].active {
+  background: #e9f1ef;
+}
+.user-select-empty {
+  padding: 9px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .hint,
 small {
   font-size: 12px;
@@ -190,13 +254,13 @@ fieldset > button {
 }
 .notice:not(:empty) {
   background: #e9f1ef;
-  border-left: 3px solid var(--accent);
+  border-inline-start: 3px solid var(--accent);
   padding: 12px 16px;
   border-radius: 5px;
   overflow-wrap: anywhere;
 }
 .steps {
-  padding-left: 22px;
+  padding-inline-start: 22px;
   color: var(--muted);
 }
 .steps li {
@@ -217,7 +281,7 @@ fieldset > button {
 table {
   border-collapse: collapse;
   width: 100%;
-  text-align: left;
+  text-align: start;
   font-size: 13px;
 }
 th {
@@ -265,7 +329,7 @@ footer {
 .skip:focus {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   background: white;
   padding: 10px;
   z-index: 10;

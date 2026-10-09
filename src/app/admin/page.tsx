@@ -1,6 +1,9 @@
 'use client';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, PasswordField, Notice } from '@/components/forms';
+import { api, PasswordField, Notice, errorMessage } from '@/components/forms';
+import { UserSelect } from '@/components/user-select';
+import { useLocale } from '@/i18n/locale-provider';
+import { fill, formatDate, localeTag, msg, type Message } from '@/i18n';
 type Session = { username: string; csrf: string; defaultMinutes: number };
 type LinkRow = {
   id: string;
@@ -20,24 +23,27 @@ type AuditRow = {
   ipAddress: string;
   linkId: string | null;
 };
-const date = (v: string | null) => (v ? new Date(v).toLocaleString() : '—');
 export default function Admin() {
+  const { locale, d } = useLocale();
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
-    [message, setMessage] = useState(''),
+    [message, setMessage] = useState<Message | null>(null),
     [links, setLinks] = useState<LinkRow[]>([]),
     [logs, setLogs] = useState<AuditRow[]>([]),
-    [url, setUrl] = useState('');
+    [url, setUrl] = useState(''),
+    [smbUsers, setSmbUsers] = useState<string[]>([]);
   const refresh = useCallback(async () => {
     const s = await api('admin/session');
     setSession(s);
-    const [l, a] = await Promise.all([
+    const [l, a, u] = await Promise.all([
       api('admin/password-links'),
       api('admin/audit-logs'),
+      api('admin/smb-users').catch(() => ({ users: [] })),
     ]);
     setLinks(l.links);
     setLogs(a.logs);
+    setSmbUsers(u.users ?? []);
   }, []);
   useEffect(() => {
     let live = true;
@@ -52,6 +58,10 @@ export default function Admin() {
           setLinks(l.links);
           setLogs(a.logs);
         }
+        return s ? api('admin/smb-users').catch(() => ({ users: [] })) : null;
+      })
+      .then((u) => {
+        if (live && u?.users) setSmbUsers(u.users);
       })
       .catch(() => {
         if (live) setSession(null);
@@ -68,7 +78,7 @@ export default function Admin() {
     const form = e.currentTarget;
     const data = new FormData(form);
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       await api('admin/login', {
         username: data.get('username'),
@@ -76,7 +86,7 @@ export default function Admin() {
       });
       await refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Unable to sign in.');
+      setMessage(errorMessage(e));
     } finally {
       form.reset();
       setBusy(false);
@@ -85,17 +95,17 @@ export default function Admin() {
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
-    const d = new FormData(form);
+    const d2 = new FormData(form);
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     setUrl('');
     try {
       const result = await api(
         'admin/password-links',
         {
-          username: d.get('username'),
-          minutes: Number(d.get('minutes')),
-          note: d.get('note'),
+          username: d2.get('username'),
+          minutes: Number(d2.get('minutes')),
+          note: d2.get('note'),
         },
         session?.csrf,
       );
@@ -103,19 +113,19 @@ export default function Admin() {
       form.reset();
       await refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Unable to create link.');
+      setMessage(errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
   async function revoke(id: string) {
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       await api(`admin/password-links/${id}/revoke`, {}, session?.csrf);
       await refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Unable to revoke link.');
+      setMessage(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -128,80 +138,82 @@ export default function Admin() {
       setLinks([]);
       setLogs([]);
       setUrl('');
-      setMessage('Signed out.');
+      setMessage(msg('signedOut'));
     } catch {
-      setMessage('Unable to sign out. Try again.');
+      setMessage(msg('signOutFailed'));
     } finally {
       setBusy(false);
     }
   }
-  if (loading) return <Notice text="Loading your workspace…" />;
+  if (loading) return <p className="notice">{d.admin.loading}</p>;
   if (!session)
     return (
       <section className="card narrow">
-        <p className="eyebrow">ADMINISTRATOR ACCESS</p>
-        <h1>Welcome back.</h1>
-        <p>Manage temporary password links in one private workspace.</p>
-        <Notice text={message} />
+        <p className="eyebrow">{d.admin.loginEyebrow}</p>
+        <h1>{d.admin.welcome}</h1>
+        <p>{d.admin.loginIntro}</p>
+        <Notice message={message} />
         <form onSubmit={login}>
           <fieldset disabled={busy}>
             <label>
-              Admin username
+              {d.admin.usernameLabel}
               <input
                 name="username"
                 autoComplete="username"
                 required
                 maxLength={64}
+                dir="ltr"
               />
             </label>
             <PasswordField
               name="password"
-              label="Admin password"
+              label={d.admin.passwordLabel}
               autoComplete="current-password"
             />
-            <button>{busy ? 'Signing in…' : 'Sign in securely'}</button>
+            <button>{busy ? d.admin.signingIn : d.admin.signIn}</button>
           </fieldset>
         </form>
-        <p className="hint">
-          No default account. Your operator creates administrator access from
-          the server.
-        </p>
+        <p className="hint">{d.admin.noDefault}</p>
       </section>
     );
   return (
     <>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">ADMIN WORKSPACE</p>
-          <h1>Password links</h1>
-          <p>
-            Signed in as {session.username}. Create access, not shared
-            passwords.
-          </p>
+          <p className="eyebrow">{d.admin.workspaceEyebrow}</p>
+          <h1>{d.admin.linksHeading}</h1>
+          <p>{fill(d.admin.signedInAs, { username: session.username })}</p>
         </div>
         <button className="secondary" disabled={busy} onClick={logout}>
-          Sign out
+          {d.admin.signOut}
         </button>
       </div>
-      <Notice text={message} />
+      <Notice message={message} />
       <div className="workspace">
         <section className="card">
-          <h2>Create a secure link</h2>
-          <p>Bound to one local SMB username. No account lookup is exposed.</p>
+          <h2>{d.admin.createHeading}</h2>
+          <p>{d.admin.createIntro}</p>
           <form onSubmit={create}>
             <fieldset disabled={busy}>
               <label>
-                TrueNAS username
-                <input
+                {d.admin.nasUsername}
+                <UserSelect
+                  users={smbUsers}
                   name="username"
-                  required
-                  pattern="[a-zA-Z0-9_][a-zA-Z0-9_.\-]*"
-                  maxLength={64}
-                  autoComplete="off"
+                  label={d.admin.nasUsername}
                 />
+                <span className="hint">
+                  {smbUsers.length
+                    ? fill(d.admin.smbCount, {
+                        count: new Intl.NumberFormat(localeTag[locale]).format(
+                          smbUsers.length,
+                        ),
+                      })
+                    : d.admin.smbUnavailable}
+                </span>
               </label>
               <label>
-                Expires after (minutes)
+                {d.admin.expiresAfter}
                 <input
                   name="minutes"
                   type="number"
@@ -212,32 +224,32 @@ export default function Admin() {
                 />
               </label>
               <label>
-                Internal note{' '}
-                <span className="hint">(optional, no secrets)</span>
+                {d.admin.noteLabel}{' '}
+                <span className="hint">{d.admin.noteHint}</span>
                 <textarea name="note" maxLength={200} rows={3} />
               </label>
-              <button>{busy ? 'Working…' : 'Generate one-time link'}</button>
+              <button>{busy ? d.admin.working : d.admin.generate}</button>
             </fieldset>
           </form>
         </section>
         <section className="card">
-          <p className="eyebrow">HOW IT WORKS</p>
-          <h2>One person. One change.</h2>
+          <p className="eyebrow">{d.admin.howEyebrow}</p>
+          <h2>{d.admin.howHeading}</h2>
           <ol className="steps">
-            <li>Create a link for a specific account.</li>
-            <li>Send it through a trusted private channel.</li>
-            <li>The user confirms their current password.</li>
-            <li>A successful change closes the link.</li>
+            {d.admin.steps.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
           </ol>
           {url && (
             <div className="issued">
-              <h3>Copy now—shown only once</h3>
+              <h3>{d.admin.copyNow}</h3>
               <label>
-                Generated password-change link
+                {d.admin.generatedLinkLabel}
                 <input
                   readOnly
                   value={url}
                   onFocus={(e) => e.currentTarget.select()}
+                  dir="ltr"
                 />
               </label>
               <div className="actions">
@@ -245,16 +257,16 @@ export default function Admin() {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(url);
-                      setMessage('Link copied. Send it privately.');
+                      setMessage(msg('copied'));
                     } catch {
-                      setMessage('Select the link and copy it manually.');
+                      setMessage(msg('copyManual'));
                     }
                   }}
                 >
-                  Copy link
+                  {d.admin.copyLink}
                 </button>
                 <button className="secondary" onClick={() => setUrl('')}>
-                  Dismiss
+                  {d.admin.dismiss}
                 </button>
               </div>
             </div>
@@ -264,35 +276,31 @@ export default function Admin() {
       <section className="card">
         <div className="page-heading">
           <div>
-            <h2>Recent links</h2>
-            <p>Latest 200 links. Status is refreshed on request.</p>
+            <h2>{d.admin.recentHeading}</h2>
+            <p>{d.admin.recentIntro}</p>
           </div>
           <button
             className="secondary"
             disabled={busy}
             onClick={() =>
-              refresh().catch(() =>
-                setMessage('Unable to refresh. Sign in again.'),
-              )
+              refresh().catch(() => setMessage(msg('refreshFailed')))
             }
           >
-            Refresh
+            {d.admin.refresh}
           </button>
         </div>
         <div className="table-scroll">
           <table>
-            <caption className="sr-only">
-              Password-change links and lifecycle
-            </caption>
+            <caption className="sr-only">{d.admin.tableCaption}</caption>
             <thead>
               <tr>
                 {[
-                  'Account / note',
-                  'Status',
-                  'Created / creator',
-                  'Expires',
-                  'Used',
-                  'Action',
+                  d.admin.thAccount,
+                  d.admin.thStatus,
+                  d.admin.thCreated,
+                  d.admin.thExpires,
+                  d.admin.thUsed,
+                  d.admin.thAction,
                 ].map((s) => (
                   <th key={s} scope="col">
                     {s}
@@ -304,27 +312,31 @@ export default function Admin() {
               {links.map((l) => (
                 <tr key={l.id}>
                   <td>
-                    <strong>{l.username}</strong>
+                    <strong dir="ltr">{l.username}</strong>
                     <small>{l.note}</small>
                   </td>
                   <td>
-                    <span className="badge">{l.status}</span>
+                    <span className="badge">
+                      {d.statuses[l.status] ?? l.status}
+                    </span>
                   </td>
                   <td>
-                    {date(l.createdAt)}
-                    <small>{l.creator}</small>
+                    {formatDate(l.createdAt, locale)}
+                    <small dir="ltr">{l.creator}</small>
                   </td>
-                  <td>{date(l.expiresAt)}</td>
-                  <td>{date(l.usedAt)}</td>
+                  <td>{formatDate(l.expiresAt, locale)}</td>
+                  <td>{formatDate(l.usedAt, locale)}</td>
                   <td>
                     {l.status === 'Active' ? (
                       <button
                         className="secondary"
                         disabled={busy}
                         onClick={() => revoke(l.id)}
-                        aria-label={`Revoke link for ${l.username}`}
+                        aria-label={fill(d.admin.revokeAria, {
+                          username: l.username,
+                        })}
                       >
-                        Revoke
+                        {d.admin.revoke}
                       </button>
                     ) : (
                       '—'
@@ -334,35 +346,33 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
-          {!links.length && <p>No links yet. Create your first one above.</p>}
+          {!links.length && <p>{d.admin.noLinks}</p>}
         </div>
-        <p className="hint">
-          “Needs review” means an operation is in progress or its outcome is
-          uncertain. An operator must reconcile it; it is never retried
-          automatically.
-        </p>
+        <p className="hint">{d.admin.needsReviewHint}</p>
       </section>
       <section className="card">
-        <h2>Audit trail</h2>
-        <p>Latest 200 events. Passwords and raw links are never recorded.</p>
+        <h2>{d.admin.auditHeading}</h2>
+        <p>{d.admin.auditIntro}</p>
         <div className="table-scroll">
           <table>
-            <caption className="sr-only">Security audit events</caption>
+            <caption className="sr-only">{d.admin.auditCaption}</caption>
             <thead>
               <tr>
-                <th scope="col">Time</th>
-                <th scope="col">Action</th>
-                <th scope="col">Result</th>
-                <th scope="col">Source</th>
+                <th scope="col">{d.admin.thTime}</th>
+                <th scope="col">{d.admin.thEvent}</th>
+                <th scope="col">{d.admin.thResult}</th>
+                <th scope="col">{d.admin.thSource}</th>
               </tr>
             </thead>
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
-                  <td>{date(l.createdAt)}</td>
-                  <td>{l.action.replaceAll('_', ' ')}</td>
-                  <td>{l.status}</td>
-                  <td>{l.ipAddress}</td>
+                  <td>{formatDate(l.createdAt, locale)}</td>
+                  <td>
+                    {d.auditActions[l.action] ?? l.action.replaceAll('_', ' ')}
+                  </td>
+                  <td>{d.auditStatuses[l.status] ?? l.status}</td>
+                  <td dir="ltr">{l.ipAddress}</td>
                 </tr>
               ))}
             </tbody>
