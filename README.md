@@ -1,26 +1,30 @@
 # Password Desk — TrueNAS SMB password self-service
 
-A single **Next.js application** with React pages and server-side API routes. Administrators sign in, issue expiring links bound to one local SMB account, copy each link once, inspect recent links/audit events, and revoke unused links. Users must supply their current password. No frontend connection to TrueNAS, exposed API credential, or default admin account.
+A single **Next.js application** with React pages and server-side API routes. Administrators sign in, issue expiring links bound to one local SMB account, copy each link once, inspect recent links/audit events, and revoke unused links. No frontend connection to TrueNAS, exposed API credential, or default admin account.
 
-> **Compatibility target, not a deployment certification:** TrueNAS SCALE **25.10.0**, JSON-RPC API **v25.10**. The installed NAS version was not provided and no real NAS was accessed during development. The client rejects other versions. Validate against a disposable local SMB account before production. This is not compatible with CORE, AD/LDAP users, or arbitrary SCALE releases.
+> **Compatibility target, not a deployment certification:** TrueNAS SCALE **25.10.0** and **25.10.7**, exact-match only. The client rejects other versions, including other 25.10.x patch releases. 25.10.7's contract was verified against the upstream middleware source (`TS-25.10.7` tag: identical `user.set_password` schema since 25.10.5, same FULL_ADMIN `old_password` bypass) and a live WebSocket handshake. Validate against a disposable local SMB account before production. This is not compatible with CORE, AD/LDAP users, or arbitrary SCALE releases.
 
-## Important TrueNAS security detail
+## Security model — links are bearer authorization
 
-In TrueNAS 25.10.0, `user.set_password` **skips `old_password` verification for FULL_ADMIN credentials**. Merely including `old_password` with an administrator API key is **not** secure self-service. Ordinary SMB-only accounts also cannot necessarily log in to the management API because authentication token creation requires privileges.
+**Possession of a valid, unused, unexpired link is the only authorization needed to set that account's password.** The form asks for no current password: the backend uses its privileged API key directly. Earlier versions additionally verified the recipient's current SMB password; that verification is gone by design decision of the operator. Treat every link as a password-equivalent secret:
 
-This application therefore first authenticates an **SMB 3.1.1, signed and encrypted session** using the submitted current password, then changes the bound account with the backend WebSocket client. Python's `smbprotocol` performs this small verification step; passwords pass through stdin, never command-line arguments, environment, files or output. No SMB files or shares are accessed. SMB service/port 445 must be reachable from the application. A failure to verify never dispatches a password change.
+- Send links only over trusted private channels; never paste them into public chat, analytics-enabled tools or ticket systems.
+- Keep link TTLs short (default 30 minutes) and revoke links on any suspicion of leakage. A link is single-use and stops working after a successful change, expiry or revocation.
+- Protect the `/admin` account with a strong password; link issuance is the only gate.
+
+In TrueNAS 25.10.0 and 25.10.7 (verified in the upstream middleware source), `user.set_password` **skips `old_password` verification for FULL_ADMIN credentials** and its schema makes `old_password` optional. The application therefore sends only `username` and `new_password`.
 
 The API-key principal requires the authority to change the target local users (`FULL_ADMIN` in this version). Use a dedicated credential, restrict network access and rotate it. This is a powerful credential: protect the app host as an administrative system. This implementation is intended for a standalone NAS with local SMB accounts; do not deploy against a domain-joined NAS without validating local identity resolution.
 
 ### Verified API contract
 
-- URL: `wss://<host[:port]>/api/v25.10`, derived exclusively from backend `TRUENAS_URL`.
+- URL: `wss://<host[:port]>/api/current`, derived exclusively from backend `TRUENAS_URL`. This is the middleware's version-independent WebSocket route; the versioned `/api/v25.10` path does not exist on a real NAS.
 - JSON-RPC 2.0, individual messages with correlated numeric IDs; no batches.
 - Authenticate: `auth.login_with_api_key`, `params: [apiKey]`, success exactly `true`.
-- Version: `system.version`, `params: []`; accept exactly `25.10.0` or `TrueNAS-25.10.0`.
-- Change: `user.set_password`, `params: [{ username, old_password, new_password }]`; success exactly `null`.
+- Version: `system.version`, `params: []`; accept exactly `25.10.0`, `TrueNAS-25.10.0`, `25.10.7`, or `TrueNAS-25.10.7`.
+- Change: `user.set_password`, `params: [{ username, new_password }]` (`old_password` is schema-optional and omitted); success exactly `null`.
 - No `user.update` call. Certificate verification stays enabled. No redirects, automatic retries, or raw upstream errors exposed.
-- API-key login is deprecated upstream and scheduled for removal in v27. Supporting another version requires updating and testing `src/server/truenas.ts`, not changing an arbitrary URL in the browser.
+- API-key login is deprecated upstream and scheduled for removal in v27. Supporting another version requires updating the exact allowlist in and testing `src/server/truenas.ts`, not changing an arbitrary URL in the browser.
 
 Official references checked during implementation:
 
@@ -28,6 +32,8 @@ Official references checked during implementation:
 - [25.10 API-key authentication](https://api.truenas.com/v25.10/api_methods_auth.login_with_api_key.html)
 - [25.10 JSON-RPC](https://api.truenas.com/v25.10/jsonrpc.html)
 - [TS-25.10.0 password implementation](https://github.com/truenas/middleware/blob/TS-25.10.0/src/middlewared/middlewared/plugins/account.py)
+- [TS-25.10.7 password implementation](https://github.com/truenas/middleware/blob/TS-25.10.7/src/middlewared/middlewared/plugins/account.py)
+- [TS-25.10.7 user.set_password schema](https://github.com/truenas/middleware/blob/TS-25.10.7/src/middlewared/middlewared/api/v25_10_5/user.py)
 - [TS-25.10.0 API routing](https://github.com/truenas/middleware/blob/TS-25.10.0/src/middlewared/middlewared/main.py)
 - [TS-25.10.0 credential privilege checks](https://github.com/truenas/middleware/blob/TS-25.10.0/src/middlewared/middlewared/plugins/auth_/authenticate.py)
 
@@ -52,7 +58,7 @@ or:
 TRUENAS_URL=https://truenas.home.local
 ```
 
-These are examples, not hardcoded destinations. Replace them with the actual address. Do not include an API path, query, fragment, or credentials. An optional HTTPS port is accepted. An IP requires a trusted certificate with that IP in its SAN. For a private CA, mount its public CA certificate and configure `NODE_EXTRA_CA_CERTS`; never disable certificate validation.
+These are examples, not hardcoded destinations. Replace them with the actual address. Do not include an API path, query, fragment, or credentials. An optional HTTPS port is accepted. An IP requires a trusted certificate with that IP in its SAN — TrueNAS's default self-signed certificate covers only `localhost` and will fail hostname validation. For a private CA, mount its public CA certificate and configure `NODE_EXTRA_CA_CERTS`; never disable certificate validation.
 
 | Variable                    | Purpose                                                                                                                                                                   |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -60,13 +66,11 @@ These are examples, not hardcoded destinations. Replace them with the actual add
 | `DATABASE_URL`              | PostgreSQL connection string. URL-encode password characters. For Compose use host `db`, database/user `password_service`, and the password matching `POSTGRES_PASSWORD`. |
 | `TRUENAS_URL`               | Required backend-only HTTPS NAS origin.                                                                                                                                   |
 | `TRUENAS_API_KEY`           | Required dedicated backend credential, configured locally.                                                                                                                |
-| `TRUENAS_API_VERSION`       | Must be `v25.10`; actual server version is checked on every operation.                                                                                                    |
 | `SESSION_SECRET`            | At least 48 randomly generated characters. Used for CSRF and private limiter keys.                                                                                        |
 | `PASSWORD_LINK_TTL_MINUTES` | Default 30; permitted 1–1440 minutes.                                                                                                                                     |
-| `PASSWORD_MIN_LENGTH`       | Default 12; configurable 12–128.                                                                                                                                          |
+| `PASSWORD_MIN_LENGTH`       | Default 8; configurable 8–128.                                                                                                                                            |
 | `RATE_LIMIT_MAX_ATTEMPTS`   | Default 5 per token and target user, and per admin login account.                                                                                                         |
 | `RATE_LIMIT_WINDOW_MINUTES` | Default 15; database-backed fixed windows.                                                                                                                                |
-| `SMB_PYTHON`                | Python executable with requirements installed; Docker sets this automatically.                                                                                            |
 | `TRUST_PROXY`               | Default false: all requests share an IP limiter. Set true only behind the supplied isolated Caddy; no direct app ingress.                                                 |
 | `POSTGRES_PASSWORD`         | Compose PostgreSQL password; must match `DATABASE_URL`.                                                                                                                   |
 | `APP_HOST`                  | Compose Caddy hostname; must match `APP_URL`.                                                                                                                             |
@@ -79,21 +83,19 @@ Startup reports invalid **variable names only**, never their values. No `NEXT_PU
 1. Verify the exact TrueNAS version in system information and consult that version's API documentation.
 2. In TrueNAS's API-key management UI, create a key for a dedicated, appropriately authorized local service administrator. Set expiry if available.
 3. Store it only in backend `TRUENAS_API_KEY` (or inject the environment from your secret manager).
-4. Permit app-to-NAS HTTPS and SMB 445 only as required. Keep the NAS management interface off the public Internet.
+4. Permit app-to-NAS HTTPS only as required. Keep the NAS management interface off the public Internet.
 5. Test a disposable account. Revoke/rotate the key if the application host is compromised. Do not grant NAS management roles to ordinary SMB users just to make this application work.
 
 ## Local development
 
-Prerequisites: Node.js 22+, Python 3.10+, PostgreSQL 17 (or a compatible maintained PostgreSQL), a trusted NAS certificate. Unit tests use an ephemeral PGlite PostgreSQL engine and do not require a NAS or database daemon.
+Prerequisites: Node.js 22+, PostgreSQL 17 (or a compatible maintained PostgreSQL), a trusted NAS certificate. Unit tests use an ephemeral PGlite PostgreSQL engine and do not require a NAS or database daemon.
 
 ```sh
 npm ci
 npx prisma generate
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
 ```
 
-Configure `.env` with `APP_URL=http://localhost:3000`, a local PostgreSQL URL, and `SMB_PYTHON` set to the absolute `.venv/bin/python` path. Then:
+Configure `.env` with `APP_URL=http://localhost:3000` and a local PostgreSQL URL. Then:
 
 ```sh
 npm run db:migrate
@@ -111,17 +113,21 @@ Open `/admin`. The admin account is independent of TrueNAS. Sessions have an abs
 2. Enter the exact local SMB username, expiration duration and optional non-secret internal note.
 3. Select **Generate one-time link**. Copy it immediately. The raw link is not recoverable from the listing or database.
 4. Send privately. Do not paste links into public chat, analytics-enabled tools or ticket systems.
-5. The recipient opens `/password-change/<opaque-token>`, enters their current password, new password and confirmation. The page never renders the assigned username or NAS address.
+5. The recipient opens `/password-change/<opaque-token>` and sets a new password with confirmation. The page never renders the assigned username or NAS address.
 6. A successful change marks the token used. All password fields clear after every submission, including failed requests.
 7. To cancel an unused active link, select **Revoke**. Expired, used, revoked and processing links cannot be submitted.
 
 User input cannot override the username: the public request schema rejects extra fields and the NAS target is resolved only from the persisted token row. Link creation deliberately does not disclose whether the username exists.
 
+## Interface language
+
+The browser interface is Persian (right-to-left) by default, with English available through the header switch. The choice is stored in a non-secret `locale` cookie (SameSite=Strict, Secure on HTTPS, one year) and validated server-side to `fa`/`en`; any other value falls back to Persian. Switching happens in place: it never reloads the page, so a generated one-time link stays visible and a half-completed form keeps its values. Machine values (link URLs, usernames, IP addresses, audit codes) are stored untranslated and localized only for display.
+
 ## Password policy
 
-Minimum 12 characters by default. Maximum 512 UTF-8 bytes. Confirmation must match; nonempty current/new values are required. NUL, username-equivalent values, unchanged passwords, simple short repeated patterns and a small set of extremely common passwords are rejected. **No trimming or character transformation** occurs. Spaces and Unicode are preserved.
+Minimum 8 characters by default (`PASSWORD_MIN_LENGTH`, configurable 8–128). Maximum 512 UTF-8 bytes. Confirmation must match; empty values and NUL characters are rejected. **No other composition rules** and **no trimming or character transformation** occur. Spaces and Unicode are preserved.
 
-This is not a comprehensive breached-password service or an entropy guarantee. Use long unique passphrases. TrueNAS's configured complexity, password history and account state rules are authoritative and can reject an otherwise acceptable password. The v25.10 API schema specifies a nonempty new password; deployment-specific password policies need validation against the real test account. Administrative changes may override NAS password-aging rules.
+TrueNAS's configured complexity, password history and account state rules are authoritative and can reject an otherwise acceptable password. The 25.10 API schema specifies a nonempty new password; deployment-specific password policies need validation against the real test account. Administrative changes may override NAS password-aging rules.
 
 ## HTTPS deployment
 
@@ -221,7 +227,7 @@ Regularly purge expired sessions and expired rate-limit rows with database maint
 ## Troubleshooting
 
 - **Startup configuration error:** correct the named fields locally. Placeholder secrets and missing NAS URL are deliberately rejected.
-- **Generic password failure:** verify current password, local SMB account state, SMB3 encryption/signing support, port 445 reachability, trusted HTTPS certificate, API-key expiry/privileges and exact server version. Never enable payload logging to diagnose it.
+- **Generic password failure:** verify the local SMB account state, trusted HTTPS certificate, API-key expiry/privileges and exact server version. Never enable payload logging to diagnose it.
 - **Needs review:** reconcile as above; never blindly retry an uncertain change.
 - **403 on forms:** `APP_URL` must exactly match the public origin. Ensure proxy forwarding and CSRF header are intact; do not loosen origin validation.
 - **429 for many users:** check whether requests are sharing the fallback IP limiter. Only enable `TRUST_PROXY=true` when direct access to the app is blocked and the proxy overwrites forwarding headers.

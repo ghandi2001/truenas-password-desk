@@ -45,7 +45,6 @@ async function main() {
         DATABASE_URL: databaseUrl,
         TRUENAS_URL: 'https://nas.invalid',
         TRUENAS_API_KEY: 'browser-fixture-not-a-real-key',
-        TRUENAS_API_VERSION: 'v25.10',
         SESSION_SECRET: 's'.repeat(64),
       },
     },
