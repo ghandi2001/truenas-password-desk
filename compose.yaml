@@ -23,6 +23,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./nas-ca:/usr/local/share/ca-certificates/nas:ro
     command: [npx, prisma, migrate, deploy]
   app:
     build:
@@ -32,6 +34,10 @@ services:
     environment:
       DATABASE_URL: postgresql://password_service:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/password_service
       TRUST_PROXY: 'true'
+    volumes:
+      # Optional: NAS private CA for TLS trust. Create ./nas-ca/ with the CA
+      # public certificate, then set NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/nas/nas-ca.crt in .env.
+      - ./nas-ca:/usr/local/share/ca-certificates/nas:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -51,7 +57,8 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
   proxy:
-    image: caddy:2-alpine
+    # 2.11+ dies silently at startup on kernel 7.0 hosts (bind never happens); 2.8 verified working.
+    image: caddy:2.8-alpine
     environment:
       APP_HOST: ${APP_HOST:?Set APP_HOST in .env}
     ports:
