@@ -31,15 +31,13 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
     DATABASE_URL: 'postgresql://test:test@localhost/test',
     TRUENAS_URL: 'https://nas.example.com',
     TRUENAS_API_KEY: 'fixture-api-key-not-real',
-    TRUENAS_API_VERSION: 'v25.10',
     SESSION_SECRET: 's'.repeat(64),
   });
   let calls = 0;
   let fail = false;
   let uncertain = false;
-  const service = new Service(db, c, async (u, old, next) => {
+  const service = new Service(db, c, async (u, next) => {
     assert.equal(u, 'alice');
-    assert.equal(old, 'Current fixture!');
     assert.equal(next, 'New fixture passphrase!');
     calls++;
     if (fail) throw new NasFailure(uncertain);
@@ -111,7 +109,6 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
     await service.change(
       token,
       {
-        currentPassword: 'Current fixture!',
         newPassword: 'New fixture passphrase!',
         confirmPassword: 'New fixture passphrase!',
       },
@@ -123,7 +120,6 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
       service.change(
         token,
         {
-          currentPassword: 'Current fixture!',
           newPassword: 'New fixture passphrase!',
           confirmPassword: 'New fixture passphrase!',
         },
@@ -150,7 +146,6 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
     assert.equal(await service.validLink(expired.token), null);
     const bound = await make();
     const data = {
-      currentPassword: 'Current fixture!',
       newPassword: 'New fixture passphrase!',
       confirmPassword: 'New fixture passphrase!',
     };
@@ -224,13 +219,7 @@ test('database-backed admin, link lifecycle, binding, limiting and concurrency',
       assert.equal(await service.limit('test-bucket', c.maxAttempts), true);
     assert.equal(await service.limit('test-bucket', c.maxAttempts), false);
     const dump = JSON.stringify(await db.audit.findMany());
-    for (const secret of [
-      password,
-      token,
-      'Current fixture!',
-      'New fixture passphrase!',
-      c.apiKey,
-    ])
+    for (const secret of [password, token, 'New fixture passphrase!', c.apiKey])
       assert.equal(dump.includes(secret), false);
   } finally {
     await db.$disconnect();

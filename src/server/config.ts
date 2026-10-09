@@ -28,7 +28,6 @@ const schema = z.object({
   DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//),
   TRUENAS_URL: origin(true),
   TRUENAS_API_KEY: secret,
-  TRUENAS_API_VERSION: z.literal('v25.10'),
   SESSION_SECRET: secret.min(48),
   PASSWORD_LINK_TTL_MINUTES: z.coerce
     .number()
@@ -36,7 +35,7 @@ const schema = z.object({
     .min(1)
     .max(1440)
     .default(30),
-  PASSWORD_MIN_LENGTH: z.coerce.number().int().min(12).max(128).default(12),
+  PASSWORD_MIN_LENGTH: z.coerce.number().int().min(8).max(128).default(8),
   RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
   RATE_LIMIT_WINDOW_MINUTES: z.coerce
     .number()
@@ -44,7 +43,6 @@ const schema = z.object({
     .min(1)
     .max(1440)
     .default(15),
-  SMB_PYTHON: z.string().min(1).default('python3'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
 });
 export function loadConfig(
@@ -65,13 +63,11 @@ export function loadConfig(
     databaseUrl: e.DATABASE_URL,
     nasUrl: new URL(e.TRUENAS_URL).origin,
     apiKey: e.TRUENAS_API_KEY,
-    apiVersion: e.TRUENAS_API_VERSION,
     sessionSecret: e.SESSION_SECRET,
     ttlMinutes: e.PASSWORD_LINK_TTL_MINUTES,
     minLength: e.PASSWORD_MIN_LENGTH,
     maxAttempts: e.RATE_LIMIT_MAX_ATTEMPTS,
     windowMinutes: e.RATE_LIMIT_WINDOW_MINUTES,
-    python: e.SMB_PYTHON,
     trustProxy: e.TRUST_PROXY === 'true',
   };
 }

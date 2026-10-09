@@ -9,13 +9,7 @@ export async function seedInitialAdmin(
 ) {
   if (
     !usernamePattern.test(username) ||
-    passwordError(
-      'initial-setup-no-current-password',
-      password,
-      confirmation,
-      username,
-      12,
-    )
+    passwordError(password, confirmation, 8)
   ) {
     throw new Error('Invalid initial administrator credentials.');
   }

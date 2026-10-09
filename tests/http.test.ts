@@ -10,7 +10,6 @@ test('HTTP boundary blocks CSRF and protects sessions without contacting NAS', a
     DATABASE_URL: 'postgresql://test:test@localhost/test',
     TRUENAS_URL: 'https://nas.example.com',
     TRUENAS_API_KEY: 'fixture-api-key-not-real',
-    TRUENAS_API_VERSION: 'v25.10',
     SESSION_SECRET: 's'.repeat(64),
   });
   const db = new PrismaClient();

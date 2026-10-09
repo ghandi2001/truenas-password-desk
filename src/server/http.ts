@@ -131,6 +131,14 @@ export function handler(service: Service) {
           await service.revoke(session.adminId, path[2], ip);
           return json({ ok: true });
         }
+        if (endpoint === 'admin/smb-users' && method === 'GET') {
+          try {
+            return json({ users: await service.listSmbUsers() });
+          } catch {
+            // Picker falls back to manual entry; never leak NAS state details.
+            return json({ users: [] }, 200);
+          }
+        }
         if (endpoint === 'admin/audit-logs' && method === 'GET')
           return json({
             logs: await service.db.audit.findMany({

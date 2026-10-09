@@ -33,28 +33,18 @@ export function equal(a: string, b: string) {
   );
 }
 export function passwordError(
-  current: string,
   next: string,
   confirm: string,
-  username: string,
   min: number,
 ): string | null {
   if (
-    ![current, next, confirm].every(
+    ![next, confirm].every(
       (p) => p.length > 0 && Buffer.byteLength(p) <= 512 && !p.includes('\0'),
     )
   )
     return 'Enter passwords of at most 512 UTF-8 bytes without NUL characters.';
   if (next !== confirm) return 'New passwords must match.';
   if ([...next].length < min) return `Use at least ${min} characters.`;
-  if (next.toLowerCase() === username.toLowerCase() || next === current)
-    return 'Choose a different, stronger password.';
-  if (
-    /^(.{1,4})\1+$/su.test(next) ||
-    /^(password|qwerty|letmein|welcome|123456|abcdef)[\d!@#$]*$/i.test(next) ||
-    new Set(next.toLowerCase()).size < 5
-  )
-    return 'Choose a less predictable password or a longer passphrase.';
   return null;
 }
 export function checkOrigin(req: Request, c: Config) {

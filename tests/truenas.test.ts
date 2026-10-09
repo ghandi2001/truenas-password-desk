@@ -7,11 +7,10 @@ const config = loadConfig({
   APP_URL: 'https://password.example.com',
   DATABASE_URL: 'postgresql://test:test@localhost/test',
   TRUENAS_URL: 'https://nas.example.com',
-  TRUENAS_API_VERSION: 'v25.10',
   TRUENAS_API_KEY: 'fixture-not-a-real-key',
   SESSION_SECRET: 's'.repeat(64),
 });
-async function fixture(mode: string, verified = true) {
+async function fixture(mode: string, reported = 'TrueNAS-25.10.7') {
   const server = new WebSocketServer({ port: 0 });
   await new Promise<void>((r) => server.on('listening', r));
   const methods: string[] = [];
@@ -22,11 +21,7 @@ async function fixture(mode: string, verified = true) {
       if (mode === 'timeout') return;
       if (m.method === 'user.set_password') {
         assert.deepEqual(m.params, [
-          {
-            username: 'alice',
-            old_password: 'Current fixture!',
-            new_password: 'New fixture passphrase!',
-          },
+          { username: 'alice', new_password: 'New fixture passphrase!' },
         ]);
         if (mode === 'disconnect') {
           s.close();
@@ -39,7 +34,7 @@ async function fixture(mode: string, verified = true) {
           : m.method === 'system.version'
             ? mode === 'version'
               ? '26.0.0'
-              : 'TrueNAS-25.10.0'
+              : reported
             : null;
       s.send(
         JSON.stringify({
@@ -56,7 +51,6 @@ async function fixture(mode: string, verified = true) {
   if (typeof address !== 'object' || !address) throw Error();
   const client = new TrueNasClient(
     config,
-    async () => verified,
     `ws://127.0.0.1:${address.port}`,
     100,
   );
@@ -69,14 +63,10 @@ async function fixture(mode: string, verified = true) {
     },
   };
 }
-test('exact JSON-RPC contract succeeds only after current SMB password verification', async () => {
+test('exact JSON-RPC contract dispatches the mutation after authentication', async () => {
   const f = await fixture('success');
   try {
-    await f.client.setUserPassword(
-      'alice',
-      'Current fixture!',
-      'New fixture passphrase!',
-    );
+    await f.client.setUserPassword('alice', 'New fixture passphrase!');
     assert.deepEqual(f.methods, [
       'auth.login_with_api_key',
       'system.version',
@@ -91,11 +81,7 @@ for (const mode of ['auth', 'version', 'timeout', 'failure', 'disconnect'])
     const f = await fixture(mode);
     try {
       await assert.rejects(
-        f.client.setUserPassword(
-          'alice',
-          'Current fixture!',
-          'New fixture passphrase!',
-        ),
+        f.client.setUserPassword('alice', 'New fixture passphrase!'),
         (e: unknown) =>
           e instanceof NasFailure &&
           !e.message.includes('sensitive') &&
@@ -105,18 +91,32 @@ for (const mode of ['auth', 'version', 'timeout', 'failure', 'disconnect'])
       await f.close();
     }
   });
-test('wrong current password never dispatches mutation', async () => {
-  const f = await fixture('success', false);
-  try {
-    await assert.rejects(
-      f.client.setUserPassword(
-        'alice',
-        'Current fixture!',
-        'New fixture passphrase!',
-      ),
-    );
-    assert.ok(!f.methods.includes('user.set_password'));
-  } finally {
-    await f.close();
-  }
+for (const reported of [
+  'TrueNAS-25.10.0',
+  '25.10.0',
+  'TrueNAS-25.10.7',
+  '25.10.7',
+])
+  test(`verified runtime version ${reported} is supported`, async () => {
+    const f = await fixture('version-ok', reported);
+    try {
+      await f.client.setUserPassword('alice', 'New fixture passphrase!');
+      assert.deepEqual(f.methods, [
+        'auth.login_with_api_key',
+        'system.version',
+        'user.set_password',
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+test('default endpoint is the NAS middleware /api/current WebSocket route', () => {
+  // Constructor without an injected endpoint exposes the production route.
+  const probe = new TrueNasClient(config);
+  probe.close();
+  // The fixed route is derived only from the configured HTTPS origin.
+  assert.ok(
+    (probe as unknown as { endpoint: string }).endpoint ===
+      'wss://nas.example.com/api/current',
+  );
 });

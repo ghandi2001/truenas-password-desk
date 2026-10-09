@@ -24,15 +24,14 @@ async function main() {
     const username = await ask(
       '\nDedicated local SMB test username (hidden): ',
     );
-    const old = await ask('\nCurrent test password (hidden): ');
     const next = await ask('\nNew test password (hidden): ');
     const confirm = await ask('\nConfirm new password (hidden): ');
     if (
       !usernamePattern.test(username) ||
-      passwordError(old, next, confirm, username, config.minLength)
+      passwordError(next, confirm, config.minLength)
     )
       throw Error();
-    await new TrueNasClient(config).setUserPassword(username, old, next);
+    await new TrueNasClient(config).setUserPassword(username, next);
     process.stdout.write(
       '\nPassword changed successfully. Verify SMB access with the new password.\n',
     );

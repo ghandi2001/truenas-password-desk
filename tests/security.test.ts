@@ -13,7 +13,6 @@ const env = {
   APP_URL: 'https://password.example.com',
   DATABASE_URL: 'postgresql://test:test@localhost/test',
   TRUENAS_URL: 'https://nas.example.com',
-  TRUENAS_API_VERSION: 'v25.10',
   TRUENAS_API_KEY: 'fixture-not-a-real-api-key',
   SESSION_SECRET: 's'.repeat(64),
 };
@@ -49,43 +48,22 @@ test('Argon2id hashes are salted and reject wrong passwords', async () => {
   assert.equal(await verifyPassword(a, 'a good sample passphrase!'), true);
   assert.equal(await verifyPassword(a, 'wrong'), false);
 });
-test('password policy rejects mismatch, weak values, username, and preserves spaces', () => {
-  assert.ok(passwordError('Existing password!', 'new', 'new', 'alice', 12));
-  assert.ok(
-    passwordError(
-      'Existing password!',
-      'Better password 123!',
-      'different',
-      'alice',
-      12,
-    ),
-  );
-  for (const p of [
-    'aaaaaaaaaaaa',
-    'password123456',
-    'abcabcabcabc',
-    'LongUsername',
-  ])
-    assert.ok(passwordError('Current pass!', p, p, 'LongUsername', 12));
-  assert.equal(
-    passwordError(
-      'Current pass!',
-      '  winter river lantern  ',
-      '  winter river lantern  ',
-      'alice',
-      12,
-    ),
-    null,
-  );
-  assert.ok(
-    passwordError(
-      '',
-      '  winter river lantern  ',
-      '  winter river lantern  ',
-      'alice',
-      12,
-    ),
-  );
+test('password policy enforces only minimum length, match, and input safety', () => {
+  // Below minimum at the configured default of 8.
+  assert.ok(passwordError('abcdefg', 'abcdefg', 8));
+  // Minimum length passes with no composition requirements.
+  assert.equal(passwordError('abcdefgh', 'abcdefgh', 8), null);
+  assert.equal(passwordError('password', 'password', 8), null);
+  assert.equal(passwordError('LongUsername', 'LongUsername', 8), null);
+  assert.equal(passwordError('aaaaaaaa', 'aaaaaaaa', 8), null);
+  // Confirmation must match.
+  assert.ok(passwordError('abcdefgh', 'different', 8));
+  // Empty, NUL, and over-512-byte values are rejected.
+  assert.ok(passwordError('', '', 8));
+  assert.ok(passwordError('ab\0cdefg', 'ab\0cdefg', 8));
+  assert.ok(passwordError('x'.repeat(513), 'x'.repeat(513), 8));
+  // Spaces are preserved, not trimmed.
+  assert.equal(passwordError('  winter  ', '  winter  ', 8), null);
 });
 test('CSRF accepts only exact origin and JSON writes', () => {
   const c = loadConfig(env);

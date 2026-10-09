@@ -34,13 +34,7 @@ async function main() {
     const confirm = await rl.question('');
     hidden = false;
     process.stdout.write('\n');
-    const error = passwordError(
-      createRandomPlaceholder(),
-      password,
-      confirm,
-      username,
-      12,
-    );
+    const error = passwordError(password, confirm, 8);
     if (error) throw Error(error);
     const created = initialOnly
       ? await seedInitialAdmin(db, username, password, confirm)
@@ -56,9 +50,6 @@ async function main() {
     rl.close();
     await db.$disconnect();
   }
-}
-function createRandomPlaceholder() {
-  return 'not-the-current-admin-password';
 }
 main().catch(async () => {
   await db.$disconnect();

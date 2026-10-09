@@ -28,7 +28,6 @@ export class SafeError extends Error {
 }
 const fields = z
   .object({
-    currentPassword: z.string().max(512),
     newPassword: z.string().max(512),
     confirmPassword: z.string().max(512),
   })
@@ -57,15 +56,13 @@ export const linkStatus = (l: PasswordLink) =>
           ? 'Expired'
           : 'Active';
 let dummy: Promise<string> | undefined;
+const smbUserCache = new WeakMap<Service, { at: number; names: string[] }>();
 export class Service {
   constructor(
     public db: PrismaClient,
     public config: Config,
-    private changeNas: (u: string, o: string, n: string) => Promise<void> = (
-      u,
-      o,
-      n,
-    ) => new TrueNasClient(config).setUserPassword(u, o, n),
+    private changeNas: (u: string, n: string) => Promise<void> = (u, n) =>
+      new TrueNasClient(config).setUserPassword(u, n),
   ) {}
   async audit(
     action: string,
@@ -230,15 +227,7 @@ export class Service {
     const parsed = fields.safeParse(input);
     if (!parsed.success) throw error();
     const p = parsed.data;
-    if (
-      passwordError(
-        p.currentPassword,
-        p.newPassword,
-        p.confirmPassword,
-        l.username,
-        this.config.minLength,
-      )
-    )
+    if (passwordError(p.newPassword, p.confirmPassword, this.config.minLength))
       throw error();
     try {
       const claim = await this.db.passwordLink.updateMany({
@@ -250,7 +239,7 @@ export class Service {
       throw error();
     }
     try {
-      await this.changeNas(l.username, p.currentPassword, p.newPassword);
+      await this.changeNas(l.username, p.newPassword);
     } catch (e) {
       const uncertain = !(e instanceof NasFailure) || e.uncertain;
       await this.db.$transaction(async (tx) => {
@@ -265,9 +254,7 @@ export class Service {
             status: uncertain ? 'needs_review' : 'denied',
             linkId: l.id,
             ipAddress: ip,
-            failureReason: uncertain
-              ? 'outcome_unknown'
-              : 'verification_failed',
+            failureReason: uncertain ? 'outcome_unknown' : 'nas_rejected',
           },
         });
       });
