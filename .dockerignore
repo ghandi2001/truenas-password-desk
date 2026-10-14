@@ -2,6 +2,7 @@
 .claude
 .env
 .env.*
+.admin-credentials
 node_modules
 .next
 coverage
