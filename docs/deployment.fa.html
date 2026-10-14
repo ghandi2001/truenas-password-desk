@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>راهنمای استقرار میز رمز عبور — TrueNAS SCALE</title>
+<style>
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('../public/fonts/Vazirmatn-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: block;
+  }
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('../public/fonts/Vazirmatn-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: block;
+  }
+  :root {
+    --ink: #1c2733;
+    --muted: #52606d;
+    --line: #d8dee6;
+    --accent: #0b6bcb;
+    --danger: #b3261e;
+    --paper: #ffffff;
+    --code-bg: #f4f6f8;
+  }
+  @page {
+    size: A4;
+    margin: 20mm 18mm;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.9;
+  }
+  h1, h2, h3 { font-weight: 700; line-height: 1.5; margin: 0 0 6pt; }
+  h1 { font-size: 17pt; margin-bottom: 2pt; }
+  h2 {
+    font-size: 13pt;
+    margin-top: 14pt;
+    padding-bottom: 3pt;
+    border-bottom: 1.5pt solid var(--accent);
+    break-after: avoid;
+  }
+  h3 { font-size: 11.5pt; margin-top: 10pt; break-after: avoid; }
+  p { margin: 0 0 6pt; text-align: justify; }
+  ol, ul { margin: 0 0 8pt; padding-inline-start: 18pt; }
+  li { margin-bottom: 3pt; }
+  .subtitle { color: var(--muted); font-size: 10pt; margin-bottom: 10pt; }
+  .step {
+    border: 0.75pt solid var(--line);
+    border-radius: 6pt;
+    padding: 8pt 12pt;
+    margin: 0 0 10pt;
+    break-inside: avoid;
+  }
+  .step > h2 { margin-top: 0; border-bottom: none; padding-bottom: 0; }
+  .stepnum {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 16pt;
+    height: 16pt;
+    line-height: 16pt;
+    text-align: center;
+    font-size: 10pt;
+    margin-inline-end: 6pt;
+  }
+  code, .cmd, .var {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: 'DejaVu Sans Mono', 'Courier New', monospace;
+    font-size: 9pt;
+  }
+  code { background: var(--code-bg); padding: 1pt 4pt; border-radius: 3pt; }
+  .cmd {
+    display: block;
+    background: var(--code-bg);
+    border-inline-start: 2.5pt solid var(--accent);
+    padding: 5pt 10pt;
+    margin: 5pt 0 7pt;
+    white-space: pre-wrap;
+    text-align: left;
+  }
+  .warn, .note {
+    border-inline-start: 3pt solid var(--danger);
+    background: #fdf3f2;
+    padding: 6pt 10pt;
+    margin: 6pt 0;
+    break-inside: avoid;
+  }
+  .note { border-color: var(--accent); background: #f0f6fd; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 9.5pt; }
+  th, td { border: 0.5pt solid var(--line); padding: 4pt 7pt; text-align: right; vertical-align: top; }
+  th { background: var(--code-bg); }
+  td code { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+  .footer-note { color: var(--muted); font-size: 8.5pt; border-top: 0.5pt solid var(--line); padding-top: 4pt; margin-top: 12pt; }
+  h2, h3, .step { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>راهنمای گام‌به‌گام استقرار «میز رمز عبور»</h1>
+<p class="subtitle">تنظیم TrueNAS SCALE و راه‌اندازی سرویس روی یک سرور لینوکسی مستقل — نسخهٔ ۲۵ اکتبر ۲۰۲۶ — مخاطب: مدیر سیستم</p>
+
+<div class="note">
+<p><strong>این راهنما چه چیزی را پوشش می‌دهد:</strong> آماده‌سازی سرور TrueNAS SCALE (بررسی نسخه، کلید API، گواهی، حساب آزمایشی)، پیکربندی سرور لینوکسی، ساختن فایل <code>.env</code>، اجرای اسکریپت استقرار و کار روزمره با اپلیکیشن. همهٔ دستورها با <code>$</code> شروع می‌شوند و باید در پوشهٔ اصلی پروژه اجرا شوند. مقادیر نمونه (مانند <code>truenas.home.local</code>) را با مقادیر واقعی خودتان جایگزین کنید.</p>
+</div>
+
+<div class="warn">
+<p><strong>قواعد امنیتی غیرقابل مذاکره:</strong> هر «پیوند» همانند یک رمز عبور است؛ هر کس پیوند معتبر و استفاده‌نشده را داشته باشد می‌تواند رمز آن حساب را تغییر دهد — بدون نیاز به رمز فعلی. کلید API باید دسترسی کامل مدیر (<span class="var">FULL_ADMIN</span>) داشته باشد و بسیار قدرتمند است. هرگز مقدار کلیدها، رمزها یا پیوندها را در چت عمومی، تیکت، اسکرین‌شات یا خروجی ترمینال قرار ندهید. اعتبارسنجی گواهی TLS را هرگز غیرفعال نکنید.</p>
+</div>
+
+<h2>خلاصهٔ معماری</h2>
+<p>این سرویس از سه سرویس داکری روی یک سرور لینوکسی مستقل تشکیل شده است: پایگاه‌دادهٔ PostgreSQL 17، اپلیکیشن Next.js و پروکسی Caddy که تنها درگاهِ روشن روی میزبان (۸۰/۴۴۳) است. اپلیکیشن از طریق WebSocket به <code>wss://&lt;nas&gt;/api/current</code> متصل می‌شود، با کلید API وارد می‌شود و <span class="var">user.set_password</span> را بدون رمز قدیمی فرامی‌خواند. اتصال مرورگر کاربران هرگز مستقیم به TrueNAS نیست.</p>
+
+<div class="step">
+<h2><span class="stepnum">۱</span> بررسی پیش‌نیازهای TrueNAS</h2>
+<ol>
+<li>در صفحهٔ اطلاعات سیستم TrueNAS نسخهٔ دقیق را بررسی کنید. <strong>فقط</strong> نسخه‌های <span class="var">25.10.0</span> یا <span class="var">25.10.7</span> از SCALE پشتیبانی می‌شوند — سایر نسخه‌های ۲۵.۱۰.x هم رد می‌شوند. CORE و کاربران AD/LDAP پشتیبانی نمی‌شوند.</li>
+<li>کاربران SMB باید <strong>محلی</strong> باشند (نه متصل به دامنهٔ Active Directory).</li>
+<li>دسترسی مدیریتی به رابط وب TrueNAS و شبکهٔ خصوصی بین دو سرور را داشته باشید.</li>
+</ol>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۲</span> ساخت کلید API روی TrueNAS</h2>
+<ol>
+<li>با حساب مدیر به رابط وب TrueNAS وارد شوید و به بخش مدیریت کلیدهای API بروید (در این نسخه از منوی سیستم قابل دسترسی است).</li>
+<li>یک کلید جدید بسازید. این کلید باید متعلق به یک حساب مدیر محلیِ <strong>اختصاصی</strong> باشد (فقط برای همین سرویس، نه حساب شخصی شما). سطح دسترسی لازم <span class="var">FULL_ADMIN</span> است.</li>
+<li>اگر تنظیم انقضا در دسترس است، برای کلید انقضا تعیین کنید. کلید را یک‌بار کپی کنید و فقط در فایل <code>.env</code> سرور اپلیکیشن ذخیره کنید.</li>
+<li>یک حساب SMB محلیِ <strong>یک‌بارمصرف</strong> برای تست بسازید (مثلاً <code>smb-test</code>). با این حساب، کل سیر کار را قبل از تولید آزمایش می‌کنید.</li>
+</ol>
+<div class="warn"><p>این کلید می‌تواند هر کاربر محلی NAS را تغییر دهد. دسترسی شبکه‌ای به رابط مدیریت NAS را فقط به میزبان اپلیکیشن محدود کنید و کلید را در صورت مشکوک شدن به نفوذ، باطل/چرخش دهید. به کاربران عادی SMB نقش مدیریتی ندهید.</p></div>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۳</span> گواهی HTTPS سرور TrueNAS</h2>
+<ol>
+<li>اپلیکیشن با آدرس HTTPS به NAS وصل می‌شود و اعتبارسنجی گواهی همیشه روشن است. اگر از IP استفاده می‌کنید، گواهی باید آن IP را در SAN داشته باشد — گواهی پیش‌فرض خودامضای TrueNAS فقط <code>localhost</code> را پوشش می‌دهد و رد می‌شود.</li>
+<li>راه پیشنهادی: یک گواهی برای نام میزبان NAS از CA داخلی سازمانتان صادر کنید (مثلاً <code>truenas.home.local</code>) و روی NAS تنظیمش کنید.</li>
+<li>فایل گواهی عمومی CA داخلی را در پوشهٔ <code>nas-ca/</code> پروژه با نام <code>nas-ca.crt</code> بگذارید؛ Compose آن را فقط‌خواندنی داخل کانتینر سوار می‌کند.</li>
+</ol>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۴</span> آماده‌سازی سرور لینوکسی</h2>
+<ol>
+<li>یک سرور لینوکسی (x64 یا arm64) با Docker و افزونهٔ Compose آماده کنید. این سرور یک سیستم مدیریتی محسوب می‌شود؛ مثل NAS از آن محافظت کنید.</li>
+<li>رکورد DNS نام عمومی سرویس (مثلاً <code>password.example.local</code>) را به همین سرور اشاره دهید. Caddy به‌طور خودکار گواهی می‌گیرد؛ برای نام‌های داخلی، پیکربندی CA خصوصی/Caddy داخلی لازم است.</li>
+<li>کد پروژه را روی سرور بگذارید (مثلاً با <code>git clone</code>) و وارد پوشهٔ آن شوید.</li>
+</ol>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۵</span> ساخت فایل <code>.env</code></h2>
+<span class="cmd">$ cp .env.example .env
+$ chmod 600 .env</span>
+<p>سپس با ویرایشگر متن (نه با دستورهایی که مقدار را در تاریخچهٔ ترمینال می‌گذارند) فایل را کامل کنید:</p>
+<table>
+<tr><th>متغیر</th><th>مقدار</th></tr>
+<tr><td><code>APP_URL</code></td><td>مبدأ عمومی دقیق با HTTPS، مثلاً <code>https://password.example.local</code></td></tr>
+<tr><td><code>APP_HOST</code></td><td>فقط نام میزبانِ همان مبدأ، مثلاً <code>password.example.local</code> — باید با APP_URL بخواند</td></tr>
+<tr><td><code>TRUENAS_URL</code></td><td>آدرس HTTPS NAS فقط برای بک‌اند، مثلاً <code>https://truenas.home.local</code> — بدون مسیر API</td></tr>
+<tr><td><code>TRUENAS_API_KEY</code></td><td>کلید ساخته‌شده در گام ۲</td></tr>
+<tr><td><code>SESSION_SECRET</code></td><td>حداقل ۴۸ نویسهٔ تصادفی، مثلاً با <code>openssl rand -hex 48</code></td></tr>
+<tr><td><code>POSTGRES_PASSWORD</code></td><td>هگز تصادفی حداقل ۶۴ نویسه (<code>openssl rand -hex 32</code>)؛ Compose خودش رشتهٔ اتصال را می‌سازد. <strong>در استقرار مجدد روی حجم موجود، رمز قبلی را نگه دارید.</strong></td></tr>
+<tr><td><code>NODE_EXTRA_CA_CERTS</code></td><td>برای CA داخلی از حالت کامنت خارج کنید: <code>/usr/local/share/ca-certificates/nas/nas-ca.crt</code></td></tr>
+</table>
+<p>متغیرهای <code>PASSWORD_LINK_TTL_MINUTES</code>، <code>PASSWORD_MIN_LENGTH</code> و نرخ‌ها مقادیر پیش‌فرض معقول دارند؛ در صورت نیاز به سیاست سازمانتان تغییرشان دهید. <code>TRUST_PROXY</code> را دست نزنید — Compose خودش برای پشت Caddy تنظیمش می‌کند.</p>
+<div class="warn"><p><code>.env</code> هرگز commit یا اسکرین‌شات نشود و در پیام یا تیکت قرار نگیرد. خطاهای راه‌اندازی فقط نام متغیر معیوب را می‌گویند، نه مقدارش را.</p></div>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۶</span> آماده‌سازی حافظهٔ ساخت آفلاین</h2>
+<p>Dockerfile از بایگانی‌های npm از پیش دانلود و راستی‌آزمایی‌شده استفاده می‌کند؛ <code>deploy.sh</code> آن‌ها را نمی‌سازد. برای معماری سرور خود (x64 یا arm64) یک‌بار اجرا کنید — این مرحله از اینترنت دانلود می‌کند:</p>
+<span class="cmd">$ python3 scripts/prepare-build-cache.py --arch x64</span>
+<p>یا از راهنمای تعاملی:</p>
+<span class="cmd">$ scripts/setup-host.sh --check        # گزارش آمادگی بدون نمایش هیچ مقدار محرمانه
+$ scripts/setup-host.sh --prepare-cache x64</span>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۷</span> استقرار</h2>
+<p>در یک ترمینال تعاملی (برای پرسش مدیر اول لازم است) اجرا کنید:</p>
+<span class="cmd">$ scripts/setup-host.sh --deploy</span>
+<p>این دستور پس از تأیید شما (تایپ <code>DEPLOY</code>)، پیکربندی Compose را بی‌صدا اعتبارسنجی می‌کند و <code>scripts/deploy.sh</code> موجود را اجرا می‌کند: ساخت ایمیج‌ها، شروع PostgreSQL، اجرای مهاجرت‌ها، پرسش تعاملی نام کاربری و رمز مدیر اول (ورودی مخفی؛ سیاست رمز اعمال می‌شود؛ هیچ رمز پیش‌فرضی وجود ندارد) و سپس شروع اپ و پروکسی با بررسی سلامت.</p>
+<p>اگر هنوز نام عمومی یا کلید NAS آماده نیست، می‌توانید فعلاً فقط پایگاه‌داده را آماده کنید:</p>
+<span class="cmd">$ ./scripts/deploy.sh --database-only</span>
+<div class="note"><p>استقرارهای بعدی، در صورت وجود مدیر، بخش ساخت مدیر را رد می‌کنند و هرگز رمز مدیر موجود را بازنشانی نمی‌کنند. خطای پیکربندی فقط نام متغیرها را می‌گوید.</p></div>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۸</span> اعتبارسنجی با حساب آزمایشی</h2>
+<ol>
+<li>مرورگر را روی <code>APP_URL</code> باز کنید؛ رابط به فارسی و راست‌به‌چپ است (با کلید سرصفحه به انگلیسی برمی‌گردد).</li>
+<li>با حساب مدیر ساخته‌شده در گام ۷ وارد <code>/admin</code> شوید.</li>
+<li>نام کاربری حساب آزمایشی (مثلاً <code>smb-test</code> از گام ۲)، مدت انقضا (پیش‌فرض ۳۰ دقیقه) و یادداشتی بدون اطلاعات محرمانه را وارد و «ایجاد پیوند یک‌بارمصرف» را بزنید. پیوند را <strong>همان‌جا</strong> کپی کنید — بعد از بستن، دوباره قابل مشاهده نیست.</li>
+<li>در مرورگر/حساب دیگری، پیوند را در یک کانال خصوصی واقعی (مثلاً پیام مستقیم رمزگذاری‌شده) به خودتان بفرستید و بازش کنید.</li>
+<li>رمز جدید و تأییدش را وارد کنید و تغییر را ثبت کنید. سپس ورود SMB با همان رمز جدید را جداگانه امتحان کنید. پیوند موفق، بلافاصله بسته می‌شود.</li>
+<li>در فهرست پیوندهای اخیر، وضعیت «استفاده‌شده» و رد حسابرسی مربوطه را ببینید. عمل لغو روی یک پیوند فعال دیگر را هم آزمایش کنید.</li>
+</ol>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۹</span> کار روزمره و امنیت پیوندها</h2>
+<ul>
+<li>برای هر درخواست کاربر، پیوند کوتاه‌عمر بسازید (۳۰ دقیقه پیش‌فرض) و از کانال خصوصی مطمئن بفرستید؛ در چت عمومی، ابزارهای آنالیتکس‌دار یا سیستم تیکت paste نکنید.</li>
+<li>صفحهٔ عمومی هرگز نام کاربری یا آدرس NAS را نشان نمی‌دهد؛ کاربر فقط رمز جدید را وارد می‌کند.</li>
+<li>پیوند مشکوک به افشا را فوراً «لغو» کنید. پیوندهای منقضی/استفاده‌شده/لغوشده قابل ارسال مجدد نیستند.</li>
+<li>ورود به <code>/admin</code> را با رمز قوی محافظت کنید؛ برای استقرارهای حساس، دسترسی به مسیر مدیر را با VPN محدود کنید (MFA داخلی وجود ندارد).</li>
+<li>هیچ «ورود رمز فعلی» وجود ندارد — این تغییرِ آگاهانهٔ اپراتور است؛ امنیت کانال ارسال پیوند جایگزین آن است.</li>
+</ul>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۱۰</span> پشتیبان‌گیری و بازیابی</h2>
+<p>پایگاه‌داده شامل هش رمز مدیر، هش نشست‌ها، نام کاربران و تاریخ حسابرسی است. به مقصد رمزگذاری‌شده و با دسترسی محدود پشتیبان بگیرید:</p>
+<span class="cmd">$ umask 077
+$ docker compose exec -T db pg_dump -U password_service -d password_service -Fc &gt; /secure-backups/password-service.dump</span>
+<p>پیش از بازیابی: جلوی ورود اپ را بگیرید، در پایگاه‌دادهٔ تمیز با <code>pg_restore</code> بازگردانی و مهاجرت‌ها را اعمال کنید، <strong>همهٔ Sessionها را حذف و همهٔ پیوندهای فعال قبلی را لغو کنید</strong> (بکاپ قدیمی‌تر از مصرف/لغو است و می‌تواند پیوند بسته‌شده را زنده کند)، سپس دسترسی را باز کنید.</p>
+</div>
+
+<div class="step">
+<h2><span class="stepnum">۱۱</span> رفع اشکال</h2>
+<ul>
+<li><strong>خطای پیکربندی هنگام راه‌اندازی:</strong> فقط نام متغیر معیوب اعلام می‌شود؛ همان را در <code>.env</code> درست کنید. مقادیر نمونهٔ <code>.env.example</code> عمداً رد می‌شوند.</li>
+<li><strong>خطای عمومی تغییر رمز:</strong> وضعیت حساب SMB محلی، اعتماد گواهی NAS، انقضا/دسترسی کلید API و نسخهٔ دقیق سرور را بررسی کنید. برای تشخیص، هرگز ثبت محتوا (payload logging) را روشن نکنید.</li>
+<li><strong>«نیاز به بررسی»:</strong> عملیاتی در جریان یا نامشخص است. اپ را متوقف کنید، وضعیت واقعی حساب را از کانال مدیریتی مطمئن بررسی کنید و طبق راهنمای README عمل کنید؛ <strong>هرگز دوباره تلاش نکنید</strong> تا روشن نشود تغییر انجام شده یا نه.</li>
+<li><strong>403 روی فرم‌ها:</strong> <code>APP_URL</code> باید دقیقاً با مبدأ عمومی یکی باشد.</li>
+<li><strong>429 برای چند کاربر:</strong> احتمالاً همه از یک آی‌پی شمارش می‌شوند؛ دسترسی مستقیم به اپ باید مسدود باشد و فقط Caddy جلوی آن باشد.</li>
+<li><strong>ساخت مدیر ممکن نیست:</strong> ترمینال تعاملی به‌کار ببرید و اول مهاجرت‌ها را اجرا کنید؛ نام کاربری تازه‌ای انتخاب کنید.</li>
+</ul>
+</div>
+
+<h2>مرجع سریع متغیرها</h2>
+<table>
+<tr><th>متغیر</th><th>پیش‌فرض/محدوده</th><th>توضیح</th></tr>
+<tr><td><code>APP_URL</code></td><td>—</td><td>مبدأ عمومی دقیق؛ در تولید HTTPS</td></tr>
+<tr><td><code>APP_HOST</code></td><td>—</td><td>نام میزبان Caddy؛ باید با APP_URL بخواند</td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>خودکار در Compose</td><td>خارج از Compose: رشتهٔ اتصال با رمز URL-encode‌شده</td></tr>
+<tr><td><code>TRUENAS_URL</code></td><td>—</td><td>مبدأ HTTPS NAS فقط برای بک‌اند</td></tr>
+<tr><td><code>TRUENAS_API_KEY</code></td><td>—</td><td>کلید مدیر محلیِ اختصاصی</td></tr>
+<tr><td><code>SESSION_SECRET</code></td><td>—</td><td>≥۴۸ نویسهٔ تصادفی؛ برای CSRF و کلیدهای محدودکننده</td></tr>
+<tr><td><code>PASSWORD_LINK_TTL_MINUTES</code></td><td>30 (۱–۱۴۴۰)</td><td>عمر پیش‌فرض پیوند</td></tr>
+<tr><td><code>PASSWORD_MIN_LENGTH</code></td><td>8 (۸–۱۲۸)</td><td>حداقل طول رمز</td></tr>
+<tr><td><code>RATE_LIMIT_MAX_ATTEMPTS</code></td><td>5</td><td>سقف تلاش به‌ازای توکن/کاربر هدف و ورود مدیر</td></tr>
+<tr><td><code>RATE_LIMIT_WINDOW_MINUTES</code></td><td>15</td><td>پنجرهٔ ثابت محدودسازی</td></tr>
+<tr><td><code>NODE_EXTRA_CA_CERTS</code></td><td>خالی</td><td>مسیر گواهی CA داخلی NAS در کانتینر</td></tr>
+<tr><td><code>TRUST_PROXY</code></td><td>false</td><td>در Compose خودکار true؛ فقط پشت Caddy ارائه‌شده</td></tr>
+</table>
+
+<p class="footer-note">این سند معادل فارسی راهنمای رسمی <code>README.md</code> مخزن است؛ در مورد اختلاف، متن انگلیسی و کد مبنا هستند. پشتیبانی فقط برای TrueNAS SCALE 25.10.0 و 25.10.7 با کاربران SMB محلی.</p>
+
+</body>
+</html>
