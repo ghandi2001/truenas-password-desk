@@ -138,7 +138,37 @@ TrueNAS's configured complexity, password history and account state rules are au
 
 The script builds the app and tools images, validates runtime configuration, waits for PostgreSQL, applies migrations, runs the first-admin seeder, and starts the app and HTTPS proxy with health checks. Run from an interactive terminal: the first run asks for an admin username and hidden password/confirmation. Passwords must satisfy the policy; no default password or password environment variable is used. Repeat deployments skip seeding when any admin already exists and never reset that admin's password. Concurrent seed processes serialize creation with a database lock.
 
-To prepare only the database before NAS credentials and public HTTPS are ready:
+### Offline database setup
+
+`setup-db.sh` initializes the database **and creates the first application administrator** without Internet access. It requires Docker Compose, a local `.env` with `POSTGRES_PASSWORD`, and **preloaded tools and PostgreSQL images**. It never builds or pulls images; missing images cause an early error. No Node installation or `.build-cache` is required on the offline server.
+
+**Prepare on a connected machine** with the same CPU architecture as the server, using the desired release's source. Create a local `.env` from `.env.example` with a non-secret placeholder `POSTGRES_PASSWORD` for Compose validation; do not transfer real credentials. From the project directory:
+
+```sh
+python3 scripts/prepare-build-cache.py --arch x64 # arm64 for an ARM64 server
+export APP_HOST=localhost
+docker compose build migrate
+docker compose pull db
+images=$(docker compose config --images db migrate)
+docker save -o ../password-desk-db-images.tar $images
+```
+
+The npm cache alone is **not** sufficient for offline builds: the Docker build also needs base images, Debian packages, and Prisma engines. The completed tools image contains the installed migration CLI, engines, migrations, and admin seeder. Rebuild/export it whenever deploying new migrations.
+
+Transfer the archive and project files to the disconnected server, **excluding `.env` and other secrets**. Keep the same project directory name on both machines so Compose resolves the same tools-image name. On an existing deployment, preserve its Compose project name and database volume. If the source/destination project names differ, retag the imported tools image to the destination's expected name (typically `<project>-migrate:latest`) with `docker tag <imported-tools-image> <destination-tools-image>`; do not change the deployment project name just to match the archive. `APP_HOST=localhost docker compose config --images db migrate` lists the expected names without printing secrets.
+
+**On the offline server**, configure `.env` locally, retaining the original PostgreSQL password for an existing volume, then run in an interactive terminal:
+
+```sh
+docker load -i /path/to/password-desk-db-images.tar
+./scripts/setup-db.sh
+```
+
+The script starts PostgreSQL, applies migrations using only local images, disables Prisma's update check, and prompts for the admin username and hidden password/confirmation. This is an application account, not a PostgreSQL superuser or TrueNAS account. Existing admins and their passwords are unchanged on reruns. The app and proxy are not started or stopped. If admin creation fails, migrations remain applied; fix the input/configuration and rerun.
+
+Only this standalone setup path is offline. `deploy.sh` (including `--setup-only` and `--database-only`) still builds images; a full offline app/HTTPS deployment is not provided by this command.
+
+To apply migrations only, **without creating an administrator**:
 
 ```sh
 ./scripts/deploy.sh --database-only
